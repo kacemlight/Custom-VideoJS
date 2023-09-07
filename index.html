@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Custom Video.js Player</title>
+    <link href="https://vjs.zencdn.net/7.8.4/video-js.css" rel="stylesheet">
+    <script src="https://vjs.zencdn.net/7.8.4/video.js"></script>
+    <link href="videojs.markers.min.css" rel="stylesheet">
+    <script src="videojs.markers.min.js"></script>
+    <style>
+        /* General Styles */
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        .video-container {
+            display: flex;
+            flex-direction: row-reverse;
+        }
+
+        #my_video {
+            flex: 3;
+        }
+
+        .side-panel {
+            flex: 1;
+            overflow-y: auto;
+            border-right: 1px solid #ccc;
+            padding: 10px;
+            box-sizing: border-box;
+            background-color: #f5f5f5;
+        }
+
+        /* Button Styles */
+        .toggle-buttons {
+            display: flex;
+            justify-content: space-between;
+            background-image: linear-gradient(90deg, #00915a, #5ec66b);
+            padding: 10px;
+            color: white;
+            border-radius: 5px;
+        }
+
+        .toggle-buttons button {
+            flex: 1;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            background-color: #f8f8f8;
+            border-color: #f8f8f8;
+            color: #212121;
+            padding: 0.7rem 2rem;
+            border-radius: 50px;
+            display: inline-block;
+            text-align: center;
+            font-weight: 600;
+            margin: 5px;
+        }
+
+        .toggle-buttons button:hover {
+            background-color: #03b672;
+            color: white;
+        }
+
+        /* Chapter and Transcription Styles */
+        h2 {
+            margin-top: 0;
+            padding: 10px;
+            color: #038755;
+            border-radius: 5px;
+            font-size: 18px;
+        }
+
+        .chapter-item,
+        .transcription-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .chapter-item:hover,
+        .transcription-item:hover {
+            background-color: #e0e0e0;
+        }
+
+        .chapter-thumbnail {
+            width: 70px;
+            height: 50px;
+            margin-right: 10px;
+        }
+
+        .active-chapter {
+            background-color: #03875426;
+            color: black;
+        }
+
+        .active-item {
+            background-color: #03875426;
+        }
+
+        #transcription-container {
+            display: none;
+        }
+
+        .mychapter {
+            display: flow;
+        }
+
+        .chapter-list {
+            padding-left: 5px;
+        }
+
+        .transcription-list {
+            padding-left: 5px;
+        }
+
+        .video-js .vjs-big-play-button {
+            font-size: 3em;
+            line-height: 1.5em;
+            height: 1.63332em;
+            width: 3em;
+            display: block;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            padding: 0;
+            cursor: pointer;
+            opacity: 1;
+            background-color: #038754;
+            transition: all 0.4s;
+            transform: translate(-50%, -50%);
+            border: none;
+        }
+
+        .toggle-transcriptions.active {
+            background-color: #03b672;
+            color: white;
+        }
+
+        .toggle-chapters.active {
+            background-color: #03b672;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="video-container">
+        <div class="side-panel">
+            <div class="toggle-buttons">
+                <button id="toggle-chapters" class="toggle-chapters active">Chapters</button>
+                <button id="toggle-transcriptions" class="toggle-transcriptions">Transcriptions</button>
+            </div>
+            <div id="chapter-container">
+                <h2>Chapitres</h2>
+                <ul id="chapter-list" class="chapter-list"></ul>
+            </div>
+            <div id="transcription-container">
+                <h2>Transcriptions</h2>
+                <ul id="transcription-list" class="transcription-list"></ul>
+            </div>
+        </div>
+
+        <video id="my_video" class="video-js" controls preload="auto">
+            <source src="your_video.mp4" type="video/mp4">
+            <track kind="subtitles" src="subtitles_en.vtt" srclang="en" label="English">
+            <track kind="chapters" src="chapters.vtt" srclang="en" label="Chapters">
+        </video>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var player = videojs('my_video', {
+                controlBar: {
+                    children: [
+                        'playToggle',
+                        'volumePanel',
+                        'currentTimeDisplay',
+                        'timeDivider',
+                        'durationDisplay',
+                        'progressControl',
+                        'remainingTimeDisplay',
+                        'fullscreenToggle',
+                    ]
+                }
+            });
+
+            player.on('play', function () {
+                var bigPlayButton = this.el().querySelector('.vjs-big-play-button');
+                if (bigPlayButton) {
+                    bigPlayButton.style.display = 'none';
+                }
+            });
+
+            player.on('pause', function () {
+                var bigPlayButton = this.el().querySelector('.vjs-big-play-button');
+                if (bigPlayButton) {
+                    bigPlayButton.style.display = 'block';
+                }
+            });
+
+            var chapterList = document.getElementById("chapter-list");
+            var chaptersTrack;
+
+            var transcriptionList = document.getElementById("transcription-list");
+            var transcriptionsTrack;
+
+
+            // Initialize the markers plugin
+            player.markers({
+                markerStyle: {
+                    'width': '10px',
+                    'height': '10px',
+                    'background-color': '#008755'
+                },
+                markers: []
+            });
+
+            // Function to create a click listener with its own 'cue'
+            function createClickListener(cue) {
+                return function () {
+                    player.currentTime(cue.startTime);
+                };
+            }
+
+            // Function to format time in seconds to HH:MM:SS
+            function formatTime(seconds) {
+                const hrs = Math.floor(seconds / 3600);
+                const mins = Math.floor((seconds % 3600) / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
+
+            // Poll for the transcriptions track to be loaded
+            var intervalId2 = setInterval(function () {
+                for (var i = 0; i < player.textTracks().length; i++) {
+                    if (player.textTracks()[i].kind === 'subtitles') {
+                        transcriptionsTrack = player.textTracks()[i];
+                        break;
+                    }
+                }
+
+                if (transcriptionsTrack && transcriptionsTrack.cues && transcriptionsTrack.cues.length > 0) {
+                    clearInterval(intervalId2);
+                    transcriptionsTrack.mode = "hidden";
+
+                    for (var i = 0; i < transcriptionsTrack.cues.length; i++) {
+                        var cue = transcriptionsTrack.cues[i];
+                        var li = document.createElement("li");
+                        li.className = "transcription-item";
+                        li.textContent = cue.text;
+                        li.addEventListener("click", function () {
+                            player.currentTime(cue.startTime);
+                        });
+                        transcriptionList.appendChild(li);
+                    }
+
+                    player.on('timeupdate', function () {
+                        if (!player.paused()) {  // Only update if the video is playing
+                            var currentTime = player.currentTime();
+                            var cues = transcriptionsTrack.cues;
+
+                            for (var i = 0; i < cues.length; i++) {
+                                var cue = cues[i];
+                                var li = transcriptionList.children[i];
+
+                                if (currentTime >= cue.startTime && currentTime <= cue.endTime) {
+                                    li.classList.add('active-item');
+                                } else {
+                                    li.classList.remove('active-item');
+                                }
+                            }
+                        }
+                    });
+                }
+            }, 500);
+
+            // Poll for the chapters track to be loaded
+            var intervalId = setInterval(function () {
+                for (var i = 0; i < player.textTracks().length; i++) {
+                    if (player.textTracks()[i].kind === 'chapters') {
+                        chaptersTrack = player.textTracks()[i];
+                        break;
+                    }
+                }
+
+                if (chaptersTrack && chaptersTrack.cues && chaptersTrack.cues.length > 0) {
+                    clearInterval(intervalId);
+
+                    chaptersTrack.mode = "hidden";
+
+                    var markers = [];
+
+                    for (var i = 0; i < chaptersTrack.cues.length; i++) {
+                        var cue = chaptersTrack.cues[i];
+                        var lines = cue.text.split('\n');
+                        lines.shift();
+                        var jsonText = lines.join('\n').trim();
+
+                        if (jsonText[0] !== '{') {
+                            jsonText = '{' + jsonText;
+                        }
+                        if (jsonText[jsonText.length - 1] !== '}') {
+                            jsonText = jsonText + '}';
+                        }
+
+                        try {
+                            var chapterData = JSON.parse(jsonText);
+                        } catch (e) {
+                            console.error("JSON parsing failed:", e);
+                            return;
+                        }
+
+                        var li = document.createElement("li");
+                        li.className = "chapter-item";
+
+                        var img = document.createElement("img");
+                        img.className = "chapter-thumbnail";
+                        img.src = chapterData.image;
+
+                        var span = document.createElement("span");
+                        span.textContent = chapterData.title;
+
+                        var time = document.createElement("span");
+                        time.textContent = cue.startTime;
+
+                        var formattedTime = formatTime(cue.startTime);
+
+                        var time = document.createElement("span");
+                        time.innerHTML = `<br><br>${formattedTime}`;
+
+                        var div = document.createElement("div");
+                        div.className = "mychapter";
+                        div.appendChild(span);
+                        div.appendChild(time);
+
+
+                        li.appendChild(img);
+                        li.appendChild(div);
+
+                        li.addEventListener("click", createClickListener(cue));
+
+                        chapterList.appendChild(li);
+
+                        markers.push({
+                            time: cue.startTime,
+                            text: chapterData.title
+                        });
+                    }
+
+                    player.markers.add(markers);
+
+                    player.on('timeupdate', function () {
+                        var currentTime = player.currentTime();
+                        var cues = chaptersTrack.cues;
+
+                        for (var i = 0; i < cues.length; i++) {
+                            var cue = cues[i];
+                            var li = chapterList.children[i];
+
+                            if (currentTime >= cue.startTime && currentTime <= cue.endTime) {
+                                li.classList.add('active-chapter');
+                            } else {
+                                li.classList.remove('active-chapter');
+                            }
+                        }
+                    });
+                }
+            }, 500);
+
+            // Additional JavaScript to toggle chapter and transcription lists
+            document.getElementById('toggle-chapters').addEventListener('click', function () {
+                document.getElementById('chapter-container').style.display = 'block';
+                document.getElementById('transcription-container').style.display = 'none';
+                document.getElementById('toggle-chapters').className = 'toggle-chapters active';
+                document.getElementById('toggle-transcriptions').className = 'toggle-transcriptions';
+
+            });
+
+            document.getElementById('toggle-transcriptions').addEventListener('click', function () {
+                document.getElementById('chapter-container').style.display = 'none';
+                document.getElementById('transcription-container').style.display = 'block';
+                document.getElementById('toggle-chapters').className = 'toggle-chapters';
+                document.getElementById('toggle-transcriptions').className = 'toggle-transcriptions active';
+            });
+        });
+    </script>
+</body>
+
+</html>
