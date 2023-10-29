@@ -17,6 +17,7 @@
         .video-container {
             display: flex;
             flex-direction: row-reverse;
+            align-items: flex-start;
         }
 
         #my_video {
@@ -26,14 +27,20 @@
         .side-panel {
             flex: 1;
             overflow-y: auto;
+            position: relative;
             border-right: 1px solid #ccc;
-            padding: 10px;
+            padding: 0px;
             box-sizing: border-box;
             background-color: #f5f5f5;
         }
 
         /* Button Styles */
         .toggle-buttons {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1;
             display: flex;
             justify-content: space-between;
             background-image: linear-gradient(90deg, #00915a, #5ec66b);
@@ -144,31 +151,29 @@
             background-color: #03b672;
             color: white;
         }
+        #transcriptionText:hover {
+            color:#03b672;
+        }
+        #chapterText:hover {
+            color:#03b672;
+        }
     </style>
 </head>
 
 <body>
     <div class="video-container">
-        <div class="side-panel">
-            <div class="toggle-buttons">
-                <button id="toggle-chapters" class="toggle-chapters active">Chapters</button>
-                <button id="toggle-transcriptions" class="toggle-transcriptions">Transcriptions</button>
-            </div>
+        <div id="side-panel" class="side-panel" style='display:none'>
             <div id="chapter-container">
-                <h2>Chapitres</h2>
+                <h2 style=" background-color: #03b672;color: white; border-radius: 0px;">Chapitres</h2>
                 <ul id="chapter-list" class="chapter-list"></ul>
             </div>
-            <div id="transcription-container">
-                <h2>Transcriptions</h2>
-                <ul id="transcription-list" class="transcription-list"></ul>
-            </div>
         </div>
-
         <video id="my_video" class="video-js" controls preload="auto">
             <source src="your_video.mp4" type="video/mp4">
-            <track kind="subtitles" src="subtitles_en.vtt" srclang="en" label="English">
-            <track kind="chapters" src="chapters.vtt" srclang="en" label="Chapters">
+            <track kind="subtitles" src="subtitles_fr.vtt" srclang="en" label="French">
+            <track kind="chapters" src="custom_chapters.vtt" srclang="en" label="Chapters">
         </video>
+
     </div>
 
     <script>
@@ -188,6 +193,74 @@
                 }
             });
 
+            ////
+
+            // Register the component here after initializing the player
+            var Component = videojs.getComponent('Component');
+            var TranscriptionPanel = videojs.extend(Component, {
+                constructor: function (player, options) {
+                    Component.apply(this, arguments);
+                    this.el().innerHTML = '<div id="transcriptionText" style="width: auto; padding: 10px; font-weight: 700;font-size: 12px;height: auto; cursor: pointer;">Sous-titrage</div>';
+                    this.on('click', function () {
+                        // Your code to toggle the native transcription
+                        var textTracks = player.textTracks();
+                        for (var i = 0; i < textTracks.length; i++) {
+                            if (textTracks[i].kind === 'subtitles') {
+                                if (textTracks[i].mode === 'showing') {
+                                    textTracks[i].mode = 'hidden';
+                                } else {
+                                    textTracks[i].mode = 'hidden';
+                                }
+                                break;
+                            }
+                        }
+                    });
+                }
+            });
+
+            var ChaptersPanel = videojs.extend(Component, {
+                constructor: function (player, options) {
+                    Component.apply(this, arguments);
+                    this.el().innerHTML = '<div id="chapterText" style="width: auto; padding: 10px; font-weight: 700;font-size: 12px;height: auto; cursor: pointer;">Chapitres</div>';
+                    this.on('click', function () {
+                        // Your code to toggle the native transcription
+                        var textTracks = player.textTracks();
+                        for (var i = 0; i < textTracks.length; i++) {
+                            if (textTracks[i].kind === 'subtitles') {
+                                if (textTracks[i].mode === 'showing') {
+                                    textTracks[i].mode = 'hidden';
+                                } else {
+                                    textTracks[i].mode = 'hidden';
+                                }
+                                break;
+                            }
+                        }
+                    });
+                }
+            });
+
+
+            videojs.registerComponent('TranscriptionPanel', TranscriptionPanel);
+            player.getChild('controlBar').addChild('TranscriptionPanel', {});
+
+            videojs.registerComponent('ChaptersPanel', ChaptersPanel);
+            player.getChild('controlBar').addChild('ChaptersPanel', {});
+
+            var divVideoElement = document.getElementById('my_video');
+
+            // Create the custom captions div
+            var customCaptions = document.createElement('div');
+            customCaptions.id = 'custom-captions';
+            customCaptions.style.position = 'absolute';
+            customCaptions.style.bottom = '50px';
+            customCaptions.style.width = '100%';
+            customCaptions.style.textAlign = 'center';
+            customCaptions.style.color = 'white';
+            customCaptions.style.fontSize = 'xx-large';
+            customCaptions.style.display = 'none';
+            divVideoElement.appendChild(customCaptions);
+            ////
+
             player.on('play', function () {
                 var bigPlayButton = this.el().querySelector('.vjs-big-play-button');
                 if (bigPlayButton) {
@@ -200,6 +273,13 @@
                 if (bigPlayButton) {
                     bigPlayButton.style.display = 'block';
                 }
+            });
+
+            player.on('canplay', function () {
+                var videoHeight = player.el().getBoundingClientRect().height;
+                var sidePanel = document.querySelector('.side-panel');
+                sidePanel.style.height = videoHeight + 'px';
+
             });
 
             var chapterList = document.getElementById("chapter-list");
@@ -247,34 +327,34 @@
                     clearInterval(intervalId2);
                     transcriptionsTrack.mode = "hidden";
 
-                    for (var i = 0; i < transcriptionsTrack.cues.length; i++) {
-                        var cue = transcriptionsTrack.cues[i];
-                        var li = document.createElement("li");
-                        li.className = "transcription-item";
-                        li.textContent = cue.text;
-                        li.addEventListener("click", function () {
-                            player.currentTime(cue.startTime);
-                        });
-                        transcriptionList.appendChild(li);
-                    }
-
                     player.on('timeupdate', function () {
-                        if (!player.paused()) {  // Only update if the video is playing
-                            var currentTime = player.currentTime();
-                            var cues = transcriptionsTrack.cues;
+                        var currentTime = player.currentTime();
+                        var cues = transcriptionsTrack.cues;
 
-                            for (var i = 0; i < cues.length; i++) {
-                                var cue = cues[i];
-                                var li = transcriptionList.children[i];
-
-                                if (currentTime >= cue.startTime && currentTime <= cue.endTime) {
-                                    li.classList.add('active-item');
-                                } else {
-                                    li.classList.remove('active-item');
-                                }
+                        var currentCue = null;
+                        for (var i = 0; i < cues.length; i++) {
+                            var cue = cues[i];
+                            if (currentTime >= cue.startTime && currentTime <= cue.endTime) {
+                                currentCue = cue;
+                                break;
                             }
                         }
+
+                        if (currentCue) {
+                            var words = currentCue.text.split(' ');
+                            var elapsed = (currentTime - currentCue.startTime) / (currentCue.endTime - currentCue.startTime);
+                            var numWordsToShow = Math.floor(words.length * elapsed);
+
+                            var highlightedText = words.slice(0, numWordsToShow).join(' ') +
+                                '<span style="color:green;">' + ' ' +
+                                words.slice(numWordsToShow, numWordsToShow + 1) + ' ' +
+                                '</span>' +
+                                words.slice(numWordsToShow + 1).join(' ');
+
+                            document.getElementById('custom-captions').innerHTML = highlightedText;
+                        }
                     });
+
                 }
             }, 500);
 
@@ -330,7 +410,7 @@
                         var formattedTime = formatTime(cue.startTime);
 
                         var time = document.createElement("span");
-                        time.innerHTML = `<br><br>${formattedTime}`;
+                        time.innerHTML = `<br><br><span style="font-size:14px; color:grey">${formattedTime}</span>`;
 
                         var div = document.createElement("div");
                         div.className = "mychapter";
@@ -371,20 +451,34 @@
                 }
             }, 500);
 
-            // Additional JavaScript to toggle chapter and transcription lists
-            document.getElementById('toggle-chapters').addEventListener('click', function () {
-                document.getElementById('chapter-container').style.display = 'block';
-                document.getElementById('transcription-container').style.display = 'none';
-                document.getElementById('toggle-chapters').className = 'toggle-chapters active';
-                document.getElementById('toggle-transcriptions').className = 'toggle-transcriptions';
+            document.getElementById('transcriptionText').addEventListener('click', function (e) {
+                var customCaptions = document.getElementById('custom-captions');
+                var transcriptionText = document.getElementById('transcriptionText');
 
+                if (customCaptions.style.display === 'none' || !customCaptions.style.display) {
+                    customCaptions.style.display = 'block';
+                    transcriptionText.style.color = '#03b672';
+
+                } else {
+                    customCaptions.style.display = 'none';
+                    transcriptionText.style.color = 'white';
+
+                }
             });
 
-            document.getElementById('toggle-transcriptions').addEventListener('click', function () {
-                document.getElementById('chapter-container').style.display = 'none';
-                document.getElementById('transcription-container').style.display = 'block';
-                document.getElementById('toggle-chapters').className = 'toggle-chapters';
-                document.getElementById('toggle-transcriptions').className = 'toggle-transcriptions active';
+            document.getElementById('chapterText').addEventListener('click', function () {
+                var chapterPanel = document.getElementById('side-panel');
+                var chapterText = document.getElementById('chapterText');
+
+                if (chapterPanel.style.display === 'none' || !chapterPanel.style.display) {
+                    chapterPanel.style.display = 'block';
+                    chapterText.style.color = '#03b672';
+
+                } else {
+                    chapterPanel.style.display = 'none';
+                    chapterText.style.color = 'white';
+
+                }
             });
         });
     </script>
